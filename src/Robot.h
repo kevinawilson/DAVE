@@ -36,8 +36,12 @@ class Robot
   private:
     float normalizeCompass(float);
 
-    int referenceEast;
-    int referenceSouth;
-    int referenceWest;
+    int _referenceNorth;
+    int _referenceEast;
+    int _referenceSouth;
+    int _referenceWest;
+    byte _sensorTrig;
+    byte _sensorEcho;
+    byte _servoPin;
 
 };

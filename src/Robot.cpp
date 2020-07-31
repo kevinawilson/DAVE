@@ -34,24 +34,29 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 MPU9250 nav(Wire,0x68);
 
 // Global Variables
-byte sensorTrig;
-byte sensorEcho;
-byte servoPin;
+byte _sensorTrig;
+byte _sensorEcho;
+byte _servoPin;
 int currentHeading;
-int referenceNorth;
-int referenceEast;
-int referenceSouth;
-int referenceWest;
+int _referenceNorth;
+int _referenceEast;
+int _referenceSouth;
+int _referenceWest;
 float magDecl = 10.91;
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
-  referenceEast = referenceNorth + 90;
-  referenceSouth = referenceNorth + 180;
-  referenceWest = referenceNorth + 270;
+  _sensorTrig = sensorTrig;
+  _sensorEcho = sensorEcho;
+  _servoPin = servoPin;
 
-  referenceEast = normalizeCompass(referenceEast);
-  referenceSouth = normalizeCompass(referenceSouth);
-  referenceWest = normalizeCompass(referenceWest);
+  _referenceNorth = referenceNorth;
+  _referenceEast = referenceNorth + 90;
+  _referenceSouth = referenceNorth + 180;
+  _referenceWest = referenceNorth + 270;
+
+  _referenceEast = normalizeCompass(_referenceEast);
+  _referenceSouth = normalizeCompass(_referenceSouth);
+  _referenceWest = normalizeCompass(_referenceWest);
 }
 
 void Robot::setupOLED() {
@@ -266,7 +271,9 @@ void Robot::setupMotors() {
 }
 
 void Robot::setupServo() {
-	sensorServo.attach(servoPin);
+  Serial.println("Starting servo.");
+
+	sensorServo.attach(_servoPin);
   sensorServo.write(90);
   delay(500);
   sensorServo.write(60);
@@ -277,30 +284,85 @@ void Robot::setupServo() {
 }
 
 void Robot::setupDistanceSensor() {
-  pinMode(sensorTrig, OUTPUT);
-  pinMode(sensorEcho, INPUT);
-  Serial.println("Range sensor online");
+  pinMode(_sensorTrig, OUTPUT);
+  pinMode(_sensorEcho, INPUT);
+  Serial.println("Range sensor online.");
 }
 
 void Robot::orient() {
-  Serial.println("Orienting robot");
+  Serial.println("Orienting robot.");
   int targetHeading;
+  float lookLeft;
+  float lookRight;
+  float distanceLeft;
+  float distanceRight;
+  int servoLeft;
+  int servoRight;
 
-  currentHeading = readNavSensor() - referenceNorth;
-  currentHeading = normalizeCompass(currentHeading);
+  currentHeading = readNavSensor();
 
   Serial.print("Current heading: ");
   Serial.println(currentHeading);
 
-  if (currentHeading >= 45 && currentHeading < 135) {
-    targetHeading = referenceEast;
-  } else if (currentHeading >= 135 && currentHeading < 225) {
-    targetHeading = referenceSouth;
-  } else if (currentHeading >= 225 && currentHeading < 315) {
-    targetHeading = referenceWest;
+  if (currentHeading >= _referenceEast && currentHeading < _referenceSouth) {
+    lookLeft = _referenceEast;
+    lookRight = _referenceSouth;
+  } else if (currentHeading >= _referenceSouth && currentHeading < _referenceWest) {
+    lookLeft = _referenceSouth;
+    lookRight = _referenceWest;
+  } else if (currentHeading >= _referenceWest && currentHeading < _referenceNorth) {
+    lookLeft = _referenceWest;
+    lookRight = _referenceNorth;
   } else {
-    targetHeading = referenceNorth;
+    lookLeft = _referenceNorth;
+    lookRight = _referenceEast;
   }
+
+  lookLeft += 720;
+  lookRight += 720;
+  currentHeading += 720;
+
+  servoLeft = (int)(currentHeading - lookLeft);
+  servoRight = (int)(currentHeading + lookRight);
+
+  sensorServo.write(90 + servoLeft);
+  delay(500);
+  distanceLeft = readDistanceSensor();
+  delay(1000);
+
+  sensorServo.write(90 - servoRight);
+  delay(500);
+  distanceRight = readDistanceSensor();
+  delay(1000);
+
+  sensorServo.write(90);
+
+  Serial.print("Distance left: ");
+  Serial.println(distanceLeft);
+  Serial.print("Distance right: ");
+  Serial.println(distanceRight);
+
+  // if (currentHeading >= 45 && currentHeading < 135) {
+  //   targetHeading = _referenceEast;
+  // } else if (currentHeading >= 135 && currentHeading < 225) {
+  //   targetHeading = _referenceSouth;
+  // } else if (currentHeading >= 225 && currentHeading < 315) {
+  //   targetHeading = _referenceWest;
+  // } else {
+  //   targetHeading = _referenceNorth;
+  // }
+
+  if (distanceLeft > distanceRight) {
+    targetHeading = lookLeft - 720;
+  } else {
+    targetHeading = lookRight - 720;
+  }
+
+
+
+  currentHeading -= 720;
+  currentHeading = normalizeCompass(currentHeading);
+  targetHeading = normalizeCompass(targetHeading);
 
   Serial.print("Target heading: ");
   Serial.println(targetHeading);
@@ -309,7 +371,7 @@ void Robot::orient() {
 }
 
 void Robot::goForward(byte vel) {
-  Serial.println("goForward command received");
+  Serial.println("goForward command received.");
   uint8_t i;
 
   for (i=0; i<4; i++) {
@@ -331,12 +393,16 @@ void Robot::goBackward(byte vel) {
 
 void Robot::rotateToTarget(int deg) {
   Serial.println("Rotating to target.");
-  float offset;
   bool turn = true;
 
-  offset = 180 - deg;
+  currentHeading = readNavSensor();
+  currentHeading += 720;
+  deg +=720;
 
-  currentHeading = normalizeCompass(currentHeading + offset);
+  Serial.println(deg);
+  Serial.println(currentHeading);
+
+  while (1) {}
 
   if (currentHeading > deg) {
     turnLeft();
@@ -345,7 +411,8 @@ void Robot::rotateToTarget(int deg) {
   }
 
   while (turn) {
-    currentHeading = readNavSensor();
+    float actualHeading;
+    currentHeading = readNavSensor() + 720;
 
     if (currentHeading > deg - 10 && currentHeading < deg + 10) {
       turn = false;
@@ -353,12 +420,16 @@ void Robot::rotateToTarget(int deg) {
       turn = true;
     }
 
+    actualHeading = normalizeCompass(currentHeading - 720);
+
     Serial.print("Current heading in turn: ");
-    Serial.println(currentHeading);
-    delay(200);
+    Serial.println(actualHeading);
+    delay(100);
   }
 
   stop();
+
+  currentHeading = readNavSensor();
 
 }
 
@@ -420,13 +491,13 @@ float Robot::readDistanceSensor() {
   float duration;
   float distance;
 
-  digitalWrite(sensorTrig, LOW);
+  digitalWrite(_sensorTrig, LOW);
 	delayMicroseconds(2);
-	digitalWrite(sensorTrig, HIGH);
+	digitalWrite(_sensorTrig, HIGH);
 	delayMicroseconds(10);
-	digitalWrite(sensorTrig, LOW);
+	digitalWrite(_sensorTrig, LOW);
 
-	duration = pulseIn(sensorEcho, HIGH);
+	duration = pulseIn(_sensorEcho, HIGH);
 	distance = (duration*.0343)/2;
 
 	return distance;
@@ -439,7 +510,7 @@ float Robot::readNavSensor() {
   float normalizer;
   float yaw_rad;
   float heading;
-  float numReadings = 200;
+  float numReadings = 100;
   float multiple_readings = 0;
   byte i;
 
@@ -475,10 +546,13 @@ float Robot::readNavSensor() {
 }
 
 float Robot::normalizeCompass(float deg) {
-  if (deg < 0) {
-    deg += 360;
-  } else if (deg > 360) {
-    deg -= 360;
+
+  while (deg > 360 || deg < 0) {
+    if (deg < 0) {
+      deg += 360;
+    } else if (deg > 360) {
+      deg -= 360;
+    }
   }
 
   return deg;
