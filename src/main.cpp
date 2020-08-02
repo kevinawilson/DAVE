@@ -4,7 +4,7 @@
 float dist;
 bool first = true;
 
-Robot robot(41,31, 9, 355);
+Robot robot(41,31, 9, 48);
 
 void setup() {
   Serial.begin(9600);
@@ -26,8 +26,8 @@ void loop() {
     robot.orient();
     first = false;
   }
-  
-  robot.goForward(255);
+
+  //robot.goForward(255);
   dist = robot.readDistanceSensor();
 
   while (dist > 30) {

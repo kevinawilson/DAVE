@@ -42,7 +42,8 @@ int _referenceNorth;
 int _referenceEast;
 int _referenceSouth;
 int _referenceWest;
-float magDecl = 10.91;
+float magDecl = 6.91; // Jonesborough
+// float magDecl = 10.91; Maryland City
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
   _sensorTrig = sensorTrig;
@@ -151,7 +152,7 @@ void Robot::setupNavSensor(bool cal) {
     Serial.println("----------");
 
     Serial.println("Preparing to calibrate gyroscope. Robot should be motionless during calibration.");
-    delay(3000);
+    delay(5000);
     Serial.println("Calibrating gyroscope.");
 
     status = nav.calibrateGyro();
@@ -231,12 +232,13 @@ void Robot::setupNavSensor(bool cal) {
       Serial.println("Accelerometer calibration unsuccessful.");
     }
 
+    while(1) {}
 
   } else {
 
-    nav.setMagCalX(-12.41, 0.93);
-    nav.setMagCalY(10.47, 1.05);
-    nav.setMagCalZ(11.25, 1.03);
+    nav.setMagCalX(16.08, 1.03);
+    nav.setMagCalY(17.50, 0.95);
+    nav.setMagCalZ(17.79, 1.02);
 
     Serial.println("   Magnetometer calibration loaded.");
 
@@ -399,11 +401,6 @@ void Robot::rotateToTarget(int deg) {
   currentHeading += 720;
   deg +=720;
 
-  Serial.println(deg);
-  Serial.println(currentHeading);
-
-  while (1) {}
-
   if (currentHeading > deg) {
     turnLeft();
   } else {
@@ -437,7 +434,7 @@ void Robot::turnLeft() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(200);
+		motors[i]->setSpeed(150);
 	}
 
 	motors[0]->run(BACKWARD);
@@ -450,7 +447,7 @@ void Robot::turnRight() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(200);
+		motors[i]->setSpeed(150);
 	}
 
   motors[0]->run(FORWARD);
