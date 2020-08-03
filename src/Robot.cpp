@@ -10,7 +10,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <MPU9250.h>
+#include <MPU9250_asukiaaa.h>
 #include <Robot.h>
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -31,7 +31,7 @@ Servo sensorServo;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-MPU9250 nav(Wire,0x68);
+MPU9250_asukiaaa nav;
 
 // Global Variables
 byte _sensorTrig;
@@ -42,12 +42,14 @@ int _referenceNorth;
 int _referenceEast;
 int _referenceSouth;
 int _referenceWest;
-float magDecl = 10.91;
+float magDecl = 6.9;
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
   _sensorTrig = sensorTrig;
   _sensorEcho = sensorEcho;
   _servoPin = servoPin;
+
+  Wire.begin();
 
   _referenceNorth = referenceNorth;
   _referenceEast = referenceNorth + 90;
@@ -80,177 +82,52 @@ void Robot::setupOLED() {
 }
 
 void Robot::setupNavSensor(bool cal) {
-  int status;
+  float mX;
+  float mY;
+  float maxX = -100;
+  float minX = 100;
+  float maxY = -100;
+  float minY = 100;
+  int i;
 
-  status = nav.begin();
-  nav.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_10HZ);
-  nav.setSrd(19);
-  nav.enableDataReadyInterrupt();
-
-  if (status < 0) {
-    Serial.println("Navigation sensor initialization unsuccessful.");
-    Serial.println("Check sensor wiring or try cycling power.");
-    Serial.print("Status: ");
-    Serial.println(status);
-    while(1) {}
-  } else {
-    Serial.println("Navigation sensors online.");
-  }
+  nav.setWire(&Wire);
+  nav.beginMag();
 
   if (cal) {
-    Serial.println("----------");
-
-    Serial.println("Calibrating magnetometer. Move the sensor in a figure 8 while calibration takes place.");
-    status = nav.calibrateMag();
-
-    if (status > 0 ) {
-      Serial.println("Magnetomer calibration complete.");
-
-      float hxb;
-      hxb = nav.getMagBiasX_uT();
-
-      float hxs;
-      hxs = nav.getMagScaleFactorX();
-
-      float hyb;
-      hyb = nav.getMagBiasY_uT();
-
-      float hys;
-      hys = nav.getMagScaleFactorY();
-
-      float hzb;
-      hzb = nav.getMagBiasZ_uT();
-
-      float hzs;
-      hzs = nav.getMagScaleFactorZ();
-
-      Serial.print("MagBiasX: ");
-      Serial.println(hxb);
-
-      Serial.print("MagBiasY: ");
-      Serial.println(hyb);
-
-      Serial.print("MagBiasZ: ");
-      Serial.println(hzb);
-
-      Serial.println("");
-
-      Serial.print("MagScaleX: ");
-      Serial.println(hxs);
-
-      Serial.print("MagScaleY: ");
-      Serial.println(hys);
-
-      Serial.print("MagScaleZ: ");
-      Serial.println(hzs);
-
-    } else {
-      Serial.println("Magnetometer calibration unsuccessful.");
-    }
-
-    Serial.println("----------");
-
-    Serial.println("Preparing to calibrate gyroscope. Robot should be motionless during calibration.");
+    Serial.println("Beginning magnetometer calibration. Rotate sensor until values print.");
     delay(3000);
-    Serial.println("Calibrating gyroscope.");
+    for (i=0; i<100; i++) {
+      nav.magUpdate();
+      mX = nav.magX();
+      mY = nav.magY();
 
-    status = nav.calibrateGyro();
+      Serial.println("X: " + String(mX));
+      Serial.println("Y: " + String(mY));
 
-    if (status > 0 ) {
-      Serial.println("Gyroscope calibration complete.");
+      maxX = (mX > maxX) ? mX : maxX;
+      maxY = (mY > maxY) ? mY : maxY;
+      minX = (mX < minX) ? mX : minX;
+      minY = (mY < minY) ? mY : minY;
 
-      float gxb;
-      gxb = nav.getGyroBiasX_rads();
-
-      float gyb;
-      gyb = nav.getGyroBiasY_rads();
-
-      float gzb;
-      gzb = nav.getGyroBiasZ_rads();
-
-      Serial.print("GyroBiasX: ");
-      Serial.println(gxb);
-
-      Serial.print("GyroBiasY: ");
-      Serial.println(gyb);
-
-      Serial.print("GyroBiasZ: ");
-      Serial.println(gzb);
-
-    } else {
-      Serial.println("Gyroscope calibration unsuccessful.");
+      delay(250);
     }
 
-    Serial.println("----------");
+    Serial.println("maxX: " + String(maxX));
+    Serial.println("minX: " + String(minX));
+    Serial.println("maxY: " + String(maxY));
+    Serial.println("minY: " + String(minY));
 
-    Serial.println("Calibrating accelerometer.");
-    status = nav.calibrateAccel();
+    float offsetX = (maxX + minX) / 2;
+    float offsetY = (maxY + minY) / 2;
 
-    if (status > 0 ) {
-      Serial.println("Accelerometer calibration complete.");
+    Serial.println("X Offset: " + String(offsetX));
+    Serial.println("Y Offset: " + String(offsetY));
 
-      float axb;
-      axb = nav.getAccelBiasX_mss();
-
-      float axs;
-      axs = nav.getAccelScaleFactorX();
-
-      float ayb;
-      ayb = nav.getAccelBiasY_mss();
-
-      float ays;
-      ays = nav.getAccelScaleFactorY();
-
-      float azb;
-      azb = nav.getAccelBiasZ_mss();
-
-      float azs;
-      azs = nav.getAccelScaleFactorZ();
-
-      Serial.print("AccelBiasX: ");
-      Serial.println(axb);
-
-      Serial.print("AccelBiasY: ");
-      Serial.println(ayb);
-
-      Serial.print("AccelBiasZ: ");
-      Serial.println(azb);
-
-      Serial.println("");
-
-      Serial.print("AccelScaleX: ");
-      Serial.println(axs);
-
-      Serial.print("AccelScaleY: ");
-      Serial.println(ays);
-
-      Serial.print("AccelScaleZ: ");
-      Serial.println(azs);
-
-    } else {
-      Serial.println("Accelerometer calibration unsuccessful.");
-    }
-
+    while (1) {}
 
   } else {
-
-    nav.setMagCalX(-12.41, 0.93);
-    nav.setMagCalY(10.47, 1.05);
-    nav.setMagCalZ(11.25, 1.03);
-
-    Serial.println("   Magnetometer calibration loaded.");
-
-    nav.setGyroBiasX_rads(0.00);
-    nav.setGyroBiasY_rads(-0.01);
-    nav.setGyroBiasX_rads(0.02);
-
-    Serial.println("   Gyroscope calibration loaded.");
-
-    nav.setAccelCalX(0, 1);
-    nav.setAccelCalY(0, 1);
-    nav.setAccelCalZ(0, 1);
-
-    Serial.println("   Accelerometer calibration loaded.");
+    nav.magXOffset = 4.78;
+    nav.magYOffset = -19.13;
   }
 }
 
@@ -504,44 +381,24 @@ float Robot::readDistanceSensor() {
 }
 
 float Robot::readNavSensor() {
-  float aX;
-  float aY;
-  float aZ;
-  float normalizer;
-  float yaw_rad;
   float heading;
-  float numReadings = 100;
-  float multiple_readings = 0;
+  int numberOfReadings = 10;
+  float headingSum = 0;
   byte i;
 
-  for (i=0; i < numReadings; i++) {
-
-    nav.readSensor();
-
-    aX = nav.getMagX_uT();
-    aY = nav.getMagY_uT();
-    aZ = nav.getMagZ_uT();
-
-    normalizer = sqrtf(aX * aX + aY * aY + aZ * aZ);
-    aX /= normalizer;
-    aY /= normalizer;
-    aZ /= normalizer;
-
-    yaw_rad = atan2f(-aY, aX);
-    yaw_rad = fmod(yaw_rad, 2.0 * PI);
-
-    if (yaw_rad < 0.0) {
-      yaw_rad += 2.0 * PI;
+  for (i=0; i<numberOfReadings; i++) {
+    if (nav.magUpdate() == 0) {
+      heading = nav.magHorizDirection();
+      headingSum += heading;
+    } else {
+      Serial.println("Cannot read mag values");
     }
-
-    multiple_readings += yaw_rad * 180.0f / PI;
   }
 
-  heading = multiple_readings / numReadings;
-  heading -=  magDecl;
+  heading = headingSum / numberOfReadings;
+  heading =  heading - 90.0f - magDecl;
   heading = normalizeCompass(heading);
 
-  currentHeading = heading;
   return heading;
 }
 

@@ -12,29 +12,36 @@ void setup() {
 
   Serial.println("\nInitializing D.A.V.E.");
 
-  robot.setupServo();
+  //robot.setupServo();
   //robot.setupOLED();
-  robot.setupMotors();
-  robot.setupDistanceSensor();
+  //robot.setupMotors();
+  //robot.setupDistanceSensor();
   robot.setupNavSensor(false);
 
 }
 
 void loop() {
+  float heading;
 
-  if (first) {
-    robot.orient();
-    first = false;
-  }
-  
-  robot.goForward(255);
-  dist = robot.readDistanceSensor();
+  heading = robot.readNavSensor();
 
-  while (dist > 30) {
-    dist = robot.readDistanceSensor();
-  }
+  Serial.println(heading);
 
-  robot.stop();
+  delay(500);
 
-  while (1) {}
+  // if (first) {
+  //   robot.orient();
+  //   first = false;
+  // }
+  //
+  // robot.goForward(255);
+  // dist = robot.readDistanceSensor();
+  //
+  // while (dist > 30) {
+  //   dist = robot.readDistanceSensor();
+  // }
+  //
+  // robot.stop();
+  //
+  // while (1) {}
 }
