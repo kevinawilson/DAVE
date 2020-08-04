@@ -43,6 +43,7 @@ int _referenceEast;
 int _referenceSouth;
 int _referenceWest;
 float magDecl = 6.9;
+int turnSpeed = 150;
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
   _sensorTrig = sensorTrig;
@@ -158,6 +159,7 @@ void Robot::setupServo() {
   sensorServo.write(120);
   delay(500);
   sensorServo.write(90);
+  delay(1000);
 }
 
 void Robot::setupDistanceSensor() {
@@ -171,15 +173,17 @@ void Robot::orient() {
   int targetHeading;
   float lookLeft;
   float lookRight;
+  float headingLeft;
+  float headingRight;
   float distanceLeft;
   float distanceRight;
   int servoLeft;
   int servoRight;
+  float offset;
 
   currentHeading = readNavSensor();
 
-  Serial.print("Current heading: ");
-  Serial.println(currentHeading);
+  Serial.println("Current heading: " + String(currentHeading));
 
   if (currentHeading >= _referenceEast && currentHeading < _referenceSouth) {
     lookLeft = _referenceEast;
@@ -195,56 +199,48 @@ void Robot::orient() {
     lookRight = _referenceEast;
   }
 
-  lookLeft += 720;
-  lookRight += 720;
-  currentHeading += 720;
+  headingLeft = lookLeft;
+  headingRight = lookRight;
 
-  servoLeft = (int)(currentHeading - lookLeft);
-  servoRight = (int)(currentHeading + lookRight);
+  if (currentHeading <= 180) {
+    offset = 180 - currentHeading;
+    lookLeft = normalizeCompass(lookLeft + offset);
+    lookRight = normalizeCompass(lookRight + offset);
+  } else {
+    offset = currentHeading - 180;
+    lookLeft = normalizeCompass(lookLeft - offset);
+    lookRight = normalizeCompass(lookRight - offset);
+  }
 
-  sensorServo.write(90 + servoLeft);
-  delay(500);
+  servoLeft = (int)(90 + 180 - lookLeft);
+  servoRight = (int)(90 - 180 + lookRight);
+
+  sensorServo.write(servoLeft);
+  delay(1000);
   distanceLeft = readDistanceSensor();
-  delay(1000);
-
-  sensorServo.write(90 - servoRight);
   delay(500);
-  distanceRight = readDistanceSensor();
+
+  sensorServo.write(servoRight);
   delay(1000);
+  distanceRight = readDistanceSensor();
+  delay(500);
 
   sensorServo.write(90);
 
-  Serial.print("Distance left: ");
-  Serial.println(distanceLeft);
-  Serial.print("Distance right: ");
-  Serial.println(distanceRight);
-
-  // if (currentHeading >= 45 && currentHeading < 135) {
-  //   targetHeading = _referenceEast;
-  // } else if (currentHeading >= 135 && currentHeading < 225) {
-  //   targetHeading = _referenceSouth;
-  // } else if (currentHeading >= 225 && currentHeading < 315) {
-  //   targetHeading = _referenceWest;
-  // } else {
-  //   targetHeading = _referenceNorth;
-  // }
+  Serial.println("Distance left: " + String(distanceLeft));
+  Serial.println("Distance right: " + String(distanceRight));
 
   if (distanceLeft > distanceRight) {
-    targetHeading = lookLeft - 720;
+    targetHeading = headingLeft;
   } else {
-    targetHeading = lookRight - 720;
+    targetHeading = headingRight;
   }
 
-
-
-  currentHeading -= 720;
-  currentHeading = normalizeCompass(currentHeading);
   targetHeading = normalizeCompass(targetHeading);
 
-  Serial.print("Target heading: ");
-  Serial.println(targetHeading);
+  Serial.println("Target heading: " + String(targetHeading));
 
-  rotateToTarget(targetHeading);
+  rotateToTarget(_referenceWest);
 }
 
 void Robot::goForward(byte vel) {
@@ -268,53 +264,59 @@ void Robot::goBackward(byte vel) {
 
 }
 
-void Robot::rotateToTarget(int deg) {
-  Serial.println("Rotating to target.");
+void Robot::rotateToTarget(int target) {
   bool turn = true;
+  float adjustedHeading;
 
-  currentHeading = readNavSensor();
-  currentHeading += 720;
-  deg +=720;
+  Serial.println("Rotating to target.");
 
-  Serial.println(deg);
-  Serial.println(currentHeading);
+  adjustedHeading = readNavSensor() - target;
 
-  while (1) {}
+  if (adjustedHeading >= 180) {
+    adjustedHeading -= 360;
+  } else if (adjustedHeading <= -180) {
+    adjustedHeading += 360;
+  }
 
-  if (currentHeading > deg) {
+  Serial.println("Adjusted heading before decision:" + String(adjustedHeading));
+
+  if (adjustedHeading >= 0) {
     turnLeft();
   } else {
     turnRight();
   }
 
   while (turn) {
-    float actualHeading;
-    currentHeading = readNavSensor() + 720;
+    adjustedHeading = readNavSensor() - target;
 
-    if (currentHeading > deg - 10 && currentHeading < deg + 10) {
+    if (adjustedHeading >= 180) {
+      adjustedHeading -= 360;
+    } else if (adjustedHeading <= -180) {
+      adjustedHeading += 360;
+    }
+
+    if (adjustedHeading > - 10.0f && adjustedHeading < 10.0f) {
       turn = false;
     } else {
       turn = true;
     }
 
-    actualHeading = normalizeCompass(currentHeading - 720);
+    Serial.println("Adjusted heading in turn: " + String(adjustedHeading));
 
-    Serial.print("Current heading in turn: ");
-    Serial.println(actualHeading);
     delay(100);
   }
 
   stop();
 
   currentHeading = readNavSensor();
-
+  Serial.println("Final heading: " + String(currentHeading));
 }
 
 void Robot::turnLeft() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(200);
+		motors[i]->setSpeed(turnSpeed);
 	}
 
 	motors[0]->run(BACKWARD);
@@ -327,7 +329,7 @@ void Robot::turnRight() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(200);
+		motors[i]->setSpeed(turnSpeed);
 	}
 
   motors[0]->run(FORWARD);

@@ -4,7 +4,7 @@
 float dist;
 bool first = true;
 
-Robot robot(41,31, 9, 355);
+Robot robot(41,31, 9, 309);
 
 void setup() {
   Serial.begin(9600);
@@ -12,36 +12,30 @@ void setup() {
 
   Serial.println("\nInitializing D.A.V.E.");
 
-  //robot.setupServo();
+  robot.setupServo();
   //robot.setupOLED();
-  //robot.setupMotors();
-  //robot.setupDistanceSensor();
+  robot.setupMotors();
+  robot.setupDistanceSensor();
   robot.setupNavSensor(false);
 
 }
 
 void loop() {
-  float heading;
+  if (first) {
+    robot.orient();
+    first = false;
+  }
 
-  heading = robot.readNavSensor();
+  while (1) {}
 
-  Serial.println(heading);
+  robot.goForward(255);
+  dist = robot.readDistanceSensor();
 
-  delay(500);
+  while (dist > 30) {
+    dist = robot.readDistanceSensor();
+  }
 
-  // if (first) {
-  //   robot.orient();
-  //   first = false;
-  // }
-  //
-  // robot.goForward(255);
-  // dist = robot.readDistanceSensor();
-  //
-  // while (dist > 30) {
-  //   dist = robot.readDistanceSensor();
-  // }
-  //
-  // robot.stop();
-  //
-  // while (1) {}
+  robot.stop();
+
+  while (1) {}
 }
