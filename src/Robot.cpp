@@ -15,7 +15,7 @@
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET    -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
 // Objects
 Adafruit_MotorShield motorShield = Adafruit_MotorShield();
@@ -44,6 +44,8 @@ int _referenceSouth;
 int _referenceWest;
 float magDecl = 6.9;
 int turnSpeed = 150;
+int turnAccuracy = 5;
+char * emptyString;
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
   _sensorTrig = sensorTrig;
@@ -60,17 +62,19 @@ Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth
   _referenceEast = normalizeCompass(_referenceEast);
   _referenceSouth = normalizeCompass(_referenceSouth);
   _referenceWest = normalizeCompass(_referenceWest);
+
+  strcpy(emptyString, String("").c_str());
 }
 
 void Robot::setupOLED() {
-  //Serial.begin(115200);
+  Serial.println("Initializing screen.");
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-  //   Serial.println(F("SSD1306 allocation failed"));
-  //   for(;;);
-  // }
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("Screen initialization failed.");
+    return;
+  }
 
   delay(2000);
   display.clearDisplay();
@@ -79,6 +83,7 @@ void Robot::setupOLED() {
   display.setTextColor(WHITE);
   display.setCursor(20, 0);
   display.println("D.A.V.E.");
+
   display.display();
 }
 
@@ -124,8 +129,10 @@ void Robot::setupNavSensor(bool cal) {
     Serial.println("X Offset: " + String(offsetX));
     Serial.println("Y Offset: " + String(offsetY));
 
-    while (1) {}
+    nav.magXOffset = offsetX;
+    nav.magYOffset = offsetY;
 
+    Serial.println("Calibration complete.");
   } else {
     nav.magXOffset = 4.78;
     nav.magYOffset = -19.13;
@@ -133,7 +140,7 @@ void Robot::setupNavSensor(bool cal) {
 }
 
 void Robot::setupMotors() {
-  uint8_t i;
+  byte i;
 
   motorShield.begin();
 
@@ -154,9 +161,9 @@ void Robot::setupServo() {
 	sensorServo.attach(_servoPin);
   sensorServo.write(90);
   delay(500);
-  sensorServo.write(60);
-  delay(500);
   sensorServo.write(120);
+  delay(500);
+  sensorServo.write(60);
   delay(500);
   sensorServo.write(90);
   delay(1000);
@@ -182,8 +189,6 @@ void Robot::orient() {
   float offset;
 
   currentHeading = readNavSensor();
-
-  Serial.println("Current heading: " + String(currentHeading));
 
   if (currentHeading >= _referenceEast && currentHeading < _referenceSouth) {
     lookLeft = _referenceEast;
@@ -212,8 +217,8 @@ void Robot::orient() {
     lookRight = normalizeCompass(lookRight - offset);
   }
 
-  servoLeft = (int)(90 + 180 - lookLeft);
-  servoRight = (int)(90 - 180 + lookRight);
+  servoLeft = (int)(270 - lookLeft);
+  servoRight = (int)(90 - (lookRight - 180));
 
   sensorServo.write(servoLeft);
   delay(1000);
@@ -227,9 +232,6 @@ void Robot::orient() {
 
   sensorServo.write(90);
 
-  Serial.println("Distance left: " + String(distanceLeft));
-  Serial.println("Distance right: " + String(distanceRight));
-
   if (distanceLeft > distanceRight) {
     targetHeading = headingLeft;
   } else {
@@ -240,7 +242,7 @@ void Robot::orient() {
 
   Serial.println("Target heading: " + String(targetHeading));
 
-  rotateToTarget(_referenceWest);
+  rotateToTarget(targetHeading);
 }
 
 void Robot::goForward(byte vel) {
@@ -295,21 +297,16 @@ void Robot::rotateToTarget(int target) {
       adjustedHeading += 360;
     }
 
-    if (adjustedHeading > - 10.0f && adjustedHeading < 10.0f) {
+    if (adjustedHeading > -turnAccuracy && adjustedHeading < turnAccuracy) {
       turn = false;
     } else {
       turn = true;
     }
 
-    Serial.println("Adjusted heading in turn: " + String(adjustedHeading));
-
-    delay(100);
+    delay(60);
   }
 
   stop();
-
-  currentHeading = readNavSensor();
-  Serial.println("Final heading: " + String(currentHeading));
 }
 
 void Robot::turnLeft() {
@@ -398,8 +395,27 @@ float Robot::readNavSensor() {
   }
 
   heading = headingSum / numberOfReadings;
-  heading =  heading - 90.0f - magDecl;
+  heading = heading - 90.0f - magDecl;
   heading = normalizeCompass(heading);
+
+  int roundedHeading = int(heading);
+
+  display.clearDisplay();
+
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(20, 0);
+  display.println("D.A.V.E.");
+
+  display.setTextSize(2);
+  display.setCursor(20, 24);
+  display.println("Heading: ");
+
+  display.setTextSize(2);
+  display.setCursor(45, 48);
+  display.println(String(roundedHeading));
+
+  display.display();
 
   return heading;
 }
@@ -415,4 +431,34 @@ float Robot::normalizeCompass(float deg) {
   }
 
   return deg;
+}
+
+float Robot::selectDirection() {
+  float headingLeft;
+  float headingRight;
+  float distanceLeft;
+  float distanceRight;
+
+  currentHeading = readNavSensor();
+  headingLeft = normalizeCompass(currentHeading - 90);
+  headingRight = normalizeCompass(currentHeading + 90);
+
+  sensorServo.write(180);
+  delay(1000);
+  distanceLeft = readDistanceSensor();
+  delay(500);
+
+  sensorServo.write(0);
+  delay(1000);
+  distanceRight = readDistanceSensor();
+  delay(500);
+
+  sensorServo.write(90);
+
+  if (distanceLeft > distanceRight) {
+    return headingLeft;
+  } else {
+    return headingRight;
+  }
+
 }

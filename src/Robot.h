@@ -4,7 +4,6 @@
 */
 
 #include <Arduino.h>
-//#include <AFMotor.h>
 #include <Adafruit_MotorShield.h>
 #include <Servo.h>
 
@@ -30,6 +29,7 @@ class Robot
     float * runFullSensorSweep();
     float readDistanceSensor();
     float readNavSensor();
+    float selectDirection();
 
     int currentHeading;
 
