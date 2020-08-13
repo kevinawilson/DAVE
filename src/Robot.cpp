@@ -43,7 +43,7 @@ int _referenceEast;
 int _referenceSouth;
 int _referenceWest;
 float magDecl = 6.9;
-int turnSpeed = 150;
+int initialTurnSpeed = 150;
 int turnAccuracy = 5;
 char * emptyString;
 
@@ -269,6 +269,8 @@ void Robot::goBackward(byte vel) {
 void Robot::rotateToTarget(int target) {
   bool turn = true;
   float adjustedHeading;
+  int turnSpeed = initialTurnSpeed;
+  byte i;
 
   Serial.println("Rotating to target.");
 
@@ -279,8 +281,6 @@ void Robot::rotateToTarget(int target) {
   } else if (adjustedHeading <= -180) {
     adjustedHeading += 360;
   }
-
-  Serial.println("Adjusted heading before decision:" + String(adjustedHeading));
 
   if (adjustedHeading >= 0) {
     turnLeft();
@@ -295,6 +295,13 @@ void Robot::rotateToTarget(int target) {
       adjustedHeading -= 360;
     } else if (adjustedHeading <= -180) {
       adjustedHeading += 360;
+    }
+
+    if (adjustedHeading > (-turnAccuracy - 10) && adjustedHeading < (turnAccuracy + 10)) {
+      turnSpeed -= 25;
+      for (i=0; i<4; i++) {
+        motors[i]->setSpeed(turnSpeed);
+      }
     }
 
     if (adjustedHeading > -turnAccuracy && adjustedHeading < turnAccuracy) {
@@ -313,7 +320,7 @@ void Robot::turnLeft() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(turnSpeed);
+		motors[i]->setSpeed(initialTurnSpeed);
 	}
 
 	motors[0]->run(BACKWARD);
@@ -326,7 +333,7 @@ void Robot::turnRight() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(turnSpeed);
+		motors[i]->setSpeed(initialTurnSpeed);
 	}
 
   motors[0]->run(FORWARD);

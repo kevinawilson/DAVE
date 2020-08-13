@@ -22,25 +22,23 @@ void setup() {
 
 void loop() {
 
-  robot.readNavSensor();
+  float targetHeading;
 
-  // float targetHeading;
-  //
-  // if (first) {
-  //   robot.orient();
-  //   first = false;
-  // }
-  //
-  // robot.goForward(150);
-  // dist = robot.readDistanceSensor();
-  //
-  // while (dist > 30) {
-  //   dist = robot.readDistanceSensor();
-  // }
-  //
-  // robot.stop();
-  //
-  // targetHeading = robot.selectDirection();
-  //
-  // robot.rotateToTarget(targetHeading);
+  if (first) {
+    robot.orient();
+    first = false;
+  }
+
+  robot.goForward(150);
+  dist = robot.readDistanceSensor();
+
+  while (dist > 20) {
+    dist = robot.readDistanceSensor();
+  }
+
+  robot.stop();
+
+  targetHeading = robot.selectDirection();
+
+  robot.rotateToTarget(targetHeading);
 }

@@ -4,8 +4,6 @@
 */
 
 #include <Arduino.h>
-#include <Adafruit_MotorShield.h>
-#include <Servo.h>
 
 class Robot
 {
