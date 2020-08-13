@@ -30,6 +30,7 @@ void loop() {
   }
 
   robot.goForward(150);
+
   dist = robot.readDistanceSensor();
 
   while (dist > 20) {
