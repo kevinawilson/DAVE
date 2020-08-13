@@ -10,12 +10,12 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <MPU9250.h>
+#include <MPU9250_asukiaaa.h>
 #include <Robot.h>
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET    -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
 // Objects
 Adafruit_MotorShield motorShield = Adafruit_MotorShield();
@@ -31,7 +31,7 @@ Servo sensorServo;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-MPU9250 nav(Wire,0x68);
+MPU9250_asukiaaa nav;
 
 // Global Variables
 byte _sensorTrig;
@@ -42,13 +42,17 @@ int _referenceNorth;
 int _referenceEast;
 int _referenceSouth;
 int _referenceWest;
-float magDecl = 6.91; // Jonesborough
-// float magDecl = 10.91; Maryland City
+float magDecl = 6.9;
+int initialTurnSpeed = 150;
+int turnAccuracy = 5;
+char * emptyString;
 
 Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth) {
   _sensorTrig = sensorTrig;
   _sensorEcho = sensorEcho;
   _servoPin = servoPin;
+
+  Wire.begin();
 
   _referenceNorth = referenceNorth;
   _referenceEast = referenceNorth + 90;
@@ -58,17 +62,19 @@ Robot::Robot(byte sensorTrig, byte sensorEcho, byte servoPin, int referenceNorth
   _referenceEast = normalizeCompass(_referenceEast);
   _referenceSouth = normalizeCompass(_referenceSouth);
   _referenceWest = normalizeCompass(_referenceWest);
+
+  strcpy(emptyString, String("").c_str());
 }
 
 void Robot::setupOLED() {
-  //Serial.begin(115200);
+  Serial.println("Initializing screen.");
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-  //   Serial.println(F("SSD1306 allocation failed"));
-  //   for(;;);
-  // }
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("Screen initialization failed.");
+    return;
+  }
 
   delay(2000);
   display.clearDisplay();
@@ -77,187 +83,64 @@ void Robot::setupOLED() {
   display.setTextColor(WHITE);
   display.setCursor(20, 0);
   display.println("D.A.V.E.");
+
   display.display();
 }
 
 void Robot::setupNavSensor(bool cal) {
-  int status;
+  float mX;
+  float mY;
+  float maxX = -100;
+  float minX = 100;
+  float maxY = -100;
+  float minY = 100;
+  int i;
 
-  status = nav.begin();
-  nav.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_10HZ);
-  nav.setSrd(19);
-  nav.enableDataReadyInterrupt();
-
-  if (status < 0) {
-    Serial.println("Navigation sensor initialization unsuccessful.");
-    Serial.println("Check sensor wiring or try cycling power.");
-    Serial.print("Status: ");
-    Serial.println(status);
-    while(1) {}
-  } else {
-    Serial.println("Navigation sensors online.");
-  }
+  nav.setWire(&Wire);
+  nav.beginMag();
 
   if (cal) {
-    Serial.println("----------");
+    Serial.println("Beginning magnetometer calibration. Rotate sensor until values print.");
+    delay(3000);
+    for (i=0; i<100; i++) {
+      nav.magUpdate();
+      mX = nav.magX();
+      mY = nav.magY();
 
-    Serial.println("Calibrating magnetometer. Move the sensor in a figure 8 while calibration takes place.");
-    status = nav.calibrateMag();
+      Serial.println("X: " + String(mX));
+      Serial.println("Y: " + String(mY));
 
-    if (status > 0 ) {
-      Serial.println("Magnetomer calibration complete.");
+      maxX = (mX > maxX) ? mX : maxX;
+      maxY = (mY > maxY) ? mY : maxY;
+      minX = (mX < minX) ? mX : minX;
+      minY = (mY < minY) ? mY : minY;
 
-      float hxb;
-      hxb = nav.getMagBiasX_uT();
-
-      float hxs;
-      hxs = nav.getMagScaleFactorX();
-
-      float hyb;
-      hyb = nav.getMagBiasY_uT();
-
-      float hys;
-      hys = nav.getMagScaleFactorY();
-
-      float hzb;
-      hzb = nav.getMagBiasZ_uT();
-
-      float hzs;
-      hzs = nav.getMagScaleFactorZ();
-
-      Serial.print("MagBiasX: ");
-      Serial.println(hxb);
-
-      Serial.print("MagBiasY: ");
-      Serial.println(hyb);
-
-      Serial.print("MagBiasZ: ");
-      Serial.println(hzb);
-
-      Serial.println("");
-
-      Serial.print("MagScaleX: ");
-      Serial.println(hxs);
-
-      Serial.print("MagScaleY: ");
-      Serial.println(hys);
-
-      Serial.print("MagScaleZ: ");
-      Serial.println(hzs);
-
-    } else {
-      Serial.println("Magnetometer calibration unsuccessful.");
+      delay(250);
     }
 
-    Serial.println("----------");
+    Serial.println("maxX: " + String(maxX));
+    Serial.println("minX: " + String(minX));
+    Serial.println("maxY: " + String(maxY));
+    Serial.println("minY: " + String(minY));
 
-    Serial.println("Preparing to calibrate gyroscope. Robot should be motionless during calibration.");
-    delay(5000);
-    Serial.println("Calibrating gyroscope.");
+    float offsetX = (maxX + minX) / 2;
+    float offsetY = (maxY + minY) / 2;
 
-    status = nav.calibrateGyro();
+    Serial.println("X Offset: " + String(offsetX));
+    Serial.println("Y Offset: " + String(offsetY));
 
-    if (status > 0 ) {
-      Serial.println("Gyroscope calibration complete.");
+    nav.magXOffset = offsetX;
+    nav.magYOffset = offsetY;
 
-      float gxb;
-      gxb = nav.getGyroBiasX_rads();
-
-      float gyb;
-      gyb = nav.getGyroBiasY_rads();
-
-      float gzb;
-      gzb = nav.getGyroBiasZ_rads();
-
-      Serial.print("GyroBiasX: ");
-      Serial.println(gxb);
-
-      Serial.print("GyroBiasY: ");
-      Serial.println(gyb);
-
-      Serial.print("GyroBiasZ: ");
-      Serial.println(gzb);
-
-    } else {
-      Serial.println("Gyroscope calibration unsuccessful.");
-    }
-
-    Serial.println("----------");
-
-    Serial.println("Calibrating accelerometer.");
-    status = nav.calibrateAccel();
-
-    if (status > 0 ) {
-      Serial.println("Accelerometer calibration complete.");
-
-      float axb;
-      axb = nav.getAccelBiasX_mss();
-
-      float axs;
-      axs = nav.getAccelScaleFactorX();
-
-      float ayb;
-      ayb = nav.getAccelBiasY_mss();
-
-      float ays;
-      ays = nav.getAccelScaleFactorY();
-
-      float azb;
-      azb = nav.getAccelBiasZ_mss();
-
-      float azs;
-      azs = nav.getAccelScaleFactorZ();
-
-      Serial.print("AccelBiasX: ");
-      Serial.println(axb);
-
-      Serial.print("AccelBiasY: ");
-      Serial.println(ayb);
-
-      Serial.print("AccelBiasZ: ");
-      Serial.println(azb);
-
-      Serial.println("");
-
-      Serial.print("AccelScaleX: ");
-      Serial.println(axs);
-
-      Serial.print("AccelScaleY: ");
-      Serial.println(ays);
-
-      Serial.print("AccelScaleZ: ");
-      Serial.println(azs);
-
-    } else {
-      Serial.println("Accelerometer calibration unsuccessful.");
-    }
-
-    while(1) {}
-
+    Serial.println("Calibration complete.");
   } else {
-
-    nav.setMagCalX(16.08, 1.03);
-    nav.setMagCalY(17.50, 0.95);
-    nav.setMagCalZ(17.79, 1.02);
-
-    Serial.println("   Magnetometer calibration loaded.");
-
-    nav.setGyroBiasX_rads(0.00);
-    nav.setGyroBiasY_rads(-0.01);
-    nav.setGyroBiasX_rads(0.02);
-
-    Serial.println("   Gyroscope calibration loaded.");
-
-    nav.setAccelCalX(0, 1);
-    nav.setAccelCalY(0, 1);
-    nav.setAccelCalZ(0, 1);
-
-    Serial.println("   Accelerometer calibration loaded.");
+    nav.magXOffset = 4.78;
+    nav.magYOffset = -19.13;
   }
 }
 
 void Robot::setupMotors() {
-  uint8_t i;
+  byte i;
 
   motorShield.begin();
 
@@ -278,11 +161,12 @@ void Robot::setupServo() {
 	sensorServo.attach(_servoPin);
   sensorServo.write(90);
   delay(500);
-  sensorServo.write(60);
-  delay(500);
   sensorServo.write(120);
   delay(500);
+  sensorServo.write(60);
+  delay(500);
   sensorServo.write(90);
+  delay(1000);
 }
 
 void Robot::setupDistanceSensor() {
@@ -296,15 +180,15 @@ void Robot::orient() {
   int targetHeading;
   float lookLeft;
   float lookRight;
+  float headingLeft;
+  float headingRight;
   float distanceLeft;
   float distanceRight;
   int servoLeft;
   int servoRight;
+  float offset;
 
   currentHeading = readNavSensor();
-
-  Serial.print("Current heading: ");
-  Serial.println(currentHeading);
 
   if (currentHeading >= _referenceEast && currentHeading < _referenceSouth) {
     lookLeft = _referenceEast;
@@ -320,54 +204,43 @@ void Robot::orient() {
     lookRight = _referenceEast;
   }
 
-  lookLeft += 720;
-  lookRight += 720;
-  currentHeading += 720;
+  headingLeft = lookLeft;
+  headingRight = lookRight;
 
-  servoLeft = (int)(currentHeading - lookLeft);
-  servoRight = (int)(currentHeading + lookRight);
+  if (currentHeading <= 180) {
+    offset = 180 - currentHeading;
+    lookLeft = normalizeCompass(lookLeft + offset);
+    lookRight = normalizeCompass(lookRight + offset);
+  } else {
+    offset = currentHeading - 180;
+    lookLeft = normalizeCompass(lookLeft - offset);
+    lookRight = normalizeCompass(lookRight - offset);
+  }
 
-  sensorServo.write(90 + servoLeft);
-  delay(500);
+  servoLeft = (int)(270 - lookLeft);
+  servoRight = (int)(90 - (lookRight - 180));
+
+  sensorServo.write(servoLeft);
+  delay(1000);
   distanceLeft = readDistanceSensor();
-  delay(1000);
-
-  sensorServo.write(90 - servoRight);
   delay(500);
-  distanceRight = readDistanceSensor();
+
+  sensorServo.write(servoRight);
   delay(1000);
+  distanceRight = readDistanceSensor();
+  delay(500);
 
   sensorServo.write(90);
 
-  Serial.print("Distance left: ");
-  Serial.println(distanceLeft);
-  Serial.print("Distance right: ");
-  Serial.println(distanceRight);
-
-  // if (currentHeading >= 45 && currentHeading < 135) {
-  //   targetHeading = _referenceEast;
-  // } else if (currentHeading >= 135 && currentHeading < 225) {
-  //   targetHeading = _referenceSouth;
-  // } else if (currentHeading >= 225 && currentHeading < 315) {
-  //   targetHeading = _referenceWest;
-  // } else {
-  //   targetHeading = _referenceNorth;
-  // }
-
   if (distanceLeft > distanceRight) {
-    targetHeading = lookLeft - 720;
+    targetHeading = headingLeft;
   } else {
-    targetHeading = lookRight - 720;
+    targetHeading = headingRight;
   }
 
-
-
-  currentHeading -= 720;
-  currentHeading = normalizeCompass(currentHeading);
   targetHeading = normalizeCompass(targetHeading);
 
-  Serial.print("Target heading: ");
-  Serial.println(targetHeading);
+  Serial.println("Target heading: " + String(targetHeading));
 
   rotateToTarget(targetHeading);
 }
@@ -393,48 +266,61 @@ void Robot::goBackward(byte vel) {
 
 }
 
-void Robot::rotateToTarget(int deg) {
-  Serial.println("Rotating to target.");
+void Robot::rotateToTarget(int target) {
   bool turn = true;
+  float adjustedHeading;
+  int turnSpeed = initialTurnSpeed;
+  byte i;
 
-  currentHeading = readNavSensor();
-  currentHeading += 720;
-  deg +=720;
+  Serial.println("Rotating to target.");
 
-  if (currentHeading > deg) {
+  adjustedHeading = readNavSensor() - target;
+
+  if (adjustedHeading >= 180) {
+    adjustedHeading -= 360;
+  } else if (adjustedHeading <= -180) {
+    adjustedHeading += 360;
+  }
+
+  if (adjustedHeading >= 0) {
     turnLeft();
   } else {
     turnRight();
   }
 
   while (turn) {
-    float actualHeading;
-    currentHeading = readNavSensor() + 720;
+    adjustedHeading = readNavSensor() - target;
 
-    if (currentHeading > deg - 10 && currentHeading < deg + 10) {
+    if (adjustedHeading >= 180) {
+      adjustedHeading -= 360;
+    } else if (adjustedHeading <= -180) {
+      adjustedHeading += 360;
+    }
+
+    if (adjustedHeading > (-turnAccuracy - 10) && adjustedHeading < (turnAccuracy + 10)) {
+      turnSpeed -= 25;
+      for (i=0; i<4; i++) {
+        motors[i]->setSpeed(turnSpeed);
+      }
+    }
+
+    if (adjustedHeading > -turnAccuracy && adjustedHeading < turnAccuracy) {
       turn = false;
     } else {
       turn = true;
     }
 
-    actualHeading = normalizeCompass(currentHeading - 720);
-
-    Serial.print("Current heading in turn: ");
-    Serial.println(actualHeading);
-    delay(100);
+    delay(60);
   }
 
   stop();
-
-  currentHeading = readNavSensor();
-
 }
 
 void Robot::turnLeft() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(150);
+		motors[i]->setSpeed(initialTurnSpeed);
 	}
 
 	motors[0]->run(BACKWARD);
@@ -447,7 +333,7 @@ void Robot::turnRight() {
   byte i;
 
   for (i=0; i<4; i++) {
-		motors[i]->setSpeed(150);
+		motors[i]->setSpeed(initialTurnSpeed);
 	}
 
   motors[0]->run(FORWARD);
@@ -501,44 +387,43 @@ float Robot::readDistanceSensor() {
 }
 
 float Robot::readNavSensor() {
-  float aX;
-  float aY;
-  float aZ;
-  float normalizer;
-  float yaw_rad;
   float heading;
-  float numReadings = 100;
-  float multiple_readings = 0;
+  int numberOfReadings = 10;
+  float headingSum = 0;
   byte i;
 
-  for (i=0; i < numReadings; i++) {
-
-    nav.readSensor();
-
-    aX = nav.getMagX_uT();
-    aY = nav.getMagY_uT();
-    aZ = nav.getMagZ_uT();
-
-    normalizer = sqrtf(aX * aX + aY * aY + aZ * aZ);
-    aX /= normalizer;
-    aY /= normalizer;
-    aZ /= normalizer;
-
-    yaw_rad = atan2f(-aY, aX);
-    yaw_rad = fmod(yaw_rad, 2.0 * PI);
-
-    if (yaw_rad < 0.0) {
-      yaw_rad += 2.0 * PI;
+  for (i=0; i<numberOfReadings; i++) {
+    if (nav.magUpdate() == 0) {
+      heading = nav.magHorizDirection();
+      headingSum += heading;
+    } else {
+      Serial.println("Cannot read mag values");
     }
-
-    multiple_readings += yaw_rad * 180.0f / PI;
   }
 
-  heading = multiple_readings / numReadings;
-  heading -=  magDecl;
+  heading = headingSum / numberOfReadings;
+  heading = heading - 90.0f - magDecl;
   heading = normalizeCompass(heading);
 
-  currentHeading = heading;
+  int roundedHeading = int(heading);
+
+  display.clearDisplay();
+
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(20, 0);
+  display.println("D.A.V.E.");
+
+  display.setTextSize(2);
+  display.setCursor(20, 24);
+  display.println("Heading: ");
+
+  display.setTextSize(2);
+  display.setCursor(45, 48);
+  display.println(String(roundedHeading));
+
+  display.display();
+
   return heading;
 }
 
@@ -553,4 +438,34 @@ float Robot::normalizeCompass(float deg) {
   }
 
   return deg;
+}
+
+float Robot::selectDirection() {
+  float headingLeft;
+  float headingRight;
+  float distanceLeft;
+  float distanceRight;
+
+  currentHeading = readNavSensor();
+  headingLeft = normalizeCompass(currentHeading - 90);
+  headingRight = normalizeCompass(currentHeading + 90);
+
+  sensorServo.write(180);
+  delay(1000);
+  distanceLeft = readDistanceSensor();
+  delay(500);
+
+  sensorServo.write(0);
+  delay(1000);
+  distanceRight = readDistanceSensor();
+  delay(500);
+
+  sensorServo.write(90);
+
+  if (distanceLeft > distanceRight) {
+    return headingLeft;
+  } else {
+    return headingRight;
+  }
+
 }
