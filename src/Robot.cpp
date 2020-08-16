@@ -37,7 +37,7 @@ MPU9250_asukiaaa nav;
 byte _sensorTrig;
 byte _sensorEcho;
 byte _servoPin;
-int currentHeading;
+float currentHeading;
 int _referenceNorth;
 int _referenceEast;
 int _referenceSouth;
@@ -246,8 +246,7 @@ void Robot::orient() {
 }
 
 void Robot::goForward(byte vel) {
-  Serial.println("goForward command received.");
-  uint8_t i;
+  byte i;
 
   for (i=0; i<4; i++) {
 		motors[i]->setSpeed(vel);
@@ -257,12 +256,18 @@ void Robot::goForward(byte vel) {
 		motors[i]->run(FORWARD);
 	}
 
-  motorLF->setSpeed(vel);
-  motorLF->run(FORWARD);
-
 }
 
 void Robot::goBackward(byte vel) {
+  byte i;
+
+  for (i=0; i<4; i++) {
+		motors[i]->setSpeed(vel);
+	}
+
+  for (i=0; i<4; i++) {
+		motors[i]->run(BACKWARD);
+	}
 
 }
 
@@ -282,7 +287,11 @@ void Robot::rotateToTarget(int target) {
     adjustedHeading += 360;
   }
 
-  if (adjustedHeading >= 0) {
+  if (adjustedHeading > -5 && adjustedHeading < 5) {
+    return;
+  }
+
+  if (adjustedHeading > 0) {
     turnLeft();
   } else {
     turnRight();
@@ -310,10 +319,16 @@ void Robot::rotateToTarget(int target) {
       turn = true;
     }
 
-    delay(60);
   }
 
   stop();
+
+  adjustedHeading = readNavSensor() - target;
+
+  if (adjustedHeading < -turnAccuracy || adjustedHeading > turnAccuracy) {
+    rotateToTarget(target);
+  }
+
 }
 
 void Robot::turnLeft() {
@@ -356,7 +371,6 @@ void Robot::stop() {
 
 float * Robot::runFullSensorSweep() {
   static float distances[7];
-
   byte i;
 
   for (i=0; i < 7; i++) {
@@ -453,12 +467,12 @@ float Robot::selectDirection() {
   sensorServo.write(180);
   delay(1000);
   distanceLeft = readDistanceSensor();
-  delay(500);
+  delay(100);
 
   sensorServo.write(0);
   delay(1000);
   distanceRight = readDistanceSensor();
-  delay(500);
+  delay(100);
 
   sensorServo.write(90);
 
