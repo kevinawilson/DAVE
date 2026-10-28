@@ -1,1 +1,1 @@
-Code for an autonomous robot build on Arduino.
+Code for an autonomous robot built on Arduino.
